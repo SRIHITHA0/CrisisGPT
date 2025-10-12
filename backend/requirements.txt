@@ -1,0 +1,8 @@
+flask
+flask-cors
+torch
+transformers
+ultralytics
+opencv-python
+pillow
+requests
