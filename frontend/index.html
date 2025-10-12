@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrisisGPT – Real-Time Disaster Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+            background-color: #0b132b;
+            color: #fff;
+        }
+
+        #sidebar {
+            width: 350px;
+            background: #1c2541;
+            overflow-y: auto;
+            padding: 1rem;
+            border-right: 2px solid #3a506b;
+        }
+
+        #sidebar h2 {
+            text-align: center;
+            color: #5bc0be;
+            margin-bottom: 1rem;
+        }
+
+        .event {
+            background: #3a506b;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            padding: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .event:hover {
+            background: #5bc0be;
+            color: #000;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+
+        #refresh-time {
+            text-align: center;
+            font-size: 0.9rem;
+            color: #a9bcd0;
+            margin-top: 5px;
+        }
+
+        .event img {
+            max-width: 100%;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="sidebar">
+        <h2>🌍 Live Disaster Feed</h2>
+        <div id="event-list">Loading...</div>
+        <div id="refresh-time"></div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+        const map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 10,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let markers = [];
+        const CATEGORY_COLORS = {
+            Wildfires: "red",
+            Volcanoes: "orange",
+            Floods: "blue",
+            Severe_Storms: "yellow",
+            Earthquakes: "purple",
+            default: "gray"
+        };
+
+        async function analyzeText(text) {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text })
+                });
+                const data = await response.json();
+                return data.response;
+            } catch {
+                return "No analysis available.";
+            }
+        }
+
+        async function loadDisasters() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/disasters");
+                const data = await response.json();
+
+                document.getElementById("event-list").innerHTML = "";
+                markers.forEach(m => map.removeLayer(m));
+                markers = [];
+
+                const events = data.events || [];
+                for (const event of events) {
+                    const [lon, lat] = event.coordinates;
+                    const color = CATEGORY_COLORS[event.category.replace(/\s/g, "_")] || CATEGORY_COLORS.default;
+
+                    // Marker with color
+                    const marker = L.circleMarker([lat, lon], {
+                        radius: 8,
+                        fillColor: color,
+                        color: "#fff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+
+                    // Placeholder CV image (replace with actual CV analysis later)
+                    const cv_image_url = "https://via.placeholder.com/100x100.png?text=CV+Image";
+
+                    const analysis = await analyzeText(event.title);
+
+                    marker.bindPopup(`
+                    <b>${event.title}</b><br>
+                    Category: ${event.category}<br>
+                    <i>${analysis}</i><br>
+                    <img src="${cv_image_url}" width="100" height="100">
+                `);
+
+                    markers.push(marker);
+
+                    // Add to sidebar
+                    const div = document.createElement("div");
+                    div.className = "event";
+                    div.innerHTML = `<b>${event.title}</b><br>${event.category}`;
+                    div.onclick = () => {
+                        map.setView([lat, lon], 5);
+                        marker.openPopup();
+                    };
+                    document.getElementById("event-list").appendChild(div);
+                }
+
+                const now = new Date().toLocaleTimeString();
+                document.getElementById("refresh-time").innerText = `🔄 Last updated: ${now}`;
+            } catch (err) {
+                console.error("Error loading disasters:", err);
+            }
+        }
+
+        // Auto-refresh every 5 minutes
+        loadDisasters();
+        setInterval(loadDisasters, 5 * 60 * 1000);
+    </script>
+
+</body>
+
+</html>
